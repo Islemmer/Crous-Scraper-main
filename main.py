@@ -1,15 +1,12 @@
+import os
 import requests
-from bs4 import BeautifulSoup
 import time
+from bs4 import BeautifulSoup
 from telegram import Bot
 
-# Lire le token Telegram depuis token.txt
-with open("token.txt", "r") as f:
-    TOKEN = f.read().strip()
-
-# Lire le chat_id Telegram depuis chat_id.txt
-with open("chat_id.txt", "r") as f:
-    CHAT_ID = f.read().strip()
+# Lire les variables d’environnement (à définir dans Render)
+TOKEN = os.environ["TELEGRAM_TOKEN"]
+CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
 bot = Bot(token=TOKEN)
 
@@ -20,7 +17,13 @@ URL = "https://trouverunlogement.lescrous.fr/tools/41/search?bounds=4.7718134_45
 seen = set()
 
 def get_logements():
-    response = requests.get(URL)
+    try:
+        response = requests.get(URL)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Erreur lors de la requête : {e}")
+        return []
+
     soup = BeautifulSoup(response.text, "html.parser")
     cards = soup.find_all("div", class_="fr-card svelte-12dfls6")
 
@@ -31,6 +34,7 @@ def get_logements():
             logements.append(title.text.strip())
     return logements
 
+# Boucle principale
 while True:
     print("🔍 Vérification des nouveaux logements à Lyon...")
     logements = get_logements()
@@ -45,8 +49,11 @@ while True:
         print(f"🚨 {len(new_logements)} nouveau(x) logement(s) trouvé(s) à Lyon !")
         for logement in new_logements:
             message = f"🏠 Nouveau logement à Lyon : {logement}"
-            bot.send_message(chat_id=CHAT_ID, text=message)
-            seen.add(logement)
+            try:
+                bot.send_message(chat_id=CHAT_ID, text=message)
+                seen.add(logement)
+            except Exception as e:
+                print(f"⚠️ Erreur lors de l'envoi du message : {e}")
     else:
         print("🕒 Aucun nouveau logement trouvé.")
 
