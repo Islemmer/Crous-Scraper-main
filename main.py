@@ -1,33 +1,36 @@
 import os
 import requests
+import time
 from bs4 import BeautifulSoup
-from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Bot
 import logging
 
-# Setup logging for Railway
+# Logging for Railway logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Environment variables
+# Lire les variables d’environnement
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 if not TOKEN or not CHAT_ID:
     raise EnvironmentError("Missing TELEGRAM_TOKEN or TELEGRAM_CHAT_ID in environment variables.")
 
-# URL for Lyon
-URL = "https://trouverunlogement.lescrous.fr/tools/41/search"
+bot = Bot(token=TOKEN)
 
-# Set of seen results to avoid duplicates
+bot.send_message(chat_id=CHAT_ID, text="Hello from Railway!")
+
+# URL filtrée pour Lyon uniquement
+URL = "https://trouverunlogement.lescrous.fr/tools/41/search?bounds=4.7718134_45.8082628_4.8983774_45.7073666"
+
+# Stocker les logements déjà vus
 seen = set()
 
-# Scraping function
 def get_logements():
     try:
         response = requests.get(URL)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        logging.error(f"❌ Request error: {e}")
+        logging.error(f"❌ Erreur lors de la requête : {e}")
         return []
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -40,33 +43,30 @@ def get_logements():
             logements.append(title.text.strip())
     return logements
 
-# Command /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Bot is up and running!")
+def main_loop():
+    while True:
+        logging.info("🔍 Vérification des nouveaux logements à Lyon...")
+        logements = get_logements()
+        logging.info(f"📦 {len(logements)} logements trouvés.")
 
-# Command /scrape to trigger scraping manually
-async def scrape(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info("🔍 Manual /scrape triggered.")
-    logements = get_logements()
-    new_logements = [log for log in logements if log not in seen]
+        new_logements = [log for log in logements if log not in seen]
 
-    if new_logements:
-        for logement in new_logements:
-            seen.add(logement)
-            await update.message.reply_text(f"🏠 Nouveau logement à Lyon : {logement}")
-    else:
-        await update.message.reply_text("😴 Aucun nouveau logement pour le moment.")
+        if new_logements:
+            logging.info(f"🚨 {len(new_logements)} nouveau(x) logement(s) trouvé(s) à Lyon !")
+            for logement in new_logements:
+                message = f"🏠 Nouveau logement à Lyon : {logement}"
+                try:
+                    bot.send_message(chat_id=CHAT_ID, text=message)
+                    seen.add(logement)
+                except Exception as e:
+                    logging.warning(f"⚠️ Erreur lors de l'envoi du message : {e}")
+        else:
+            logging.info("🕒 Aucun nouveau logement trouvé.")
 
-# Main function
-def main():
-    application = ApplicationBuilder().token(TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("scrape", scrape))
-
-    # Start bot
-    logging.info("🤖 Bot started via webhook/polling.")
-    application.run_polling()
+        time.sleep(120)  # Attendre 2 minutes
 
 if __name__ == "__main__":
-    main()
+    try:
+        main_loop()
+    except KeyboardInterrupt:
+        logging.info("🛑 Arrêt manuel du script.")
