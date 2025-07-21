@@ -63,7 +63,7 @@ def main_loop():
         else:
             logging.info("🕒 Aucun nouveau logement trouvé.")
 
-        time.sleep(120)  # Attendre 2 minutes
+        time.sleep(30)  # Attendre 2 minutes
 
 if __name__ == "__main__":
     try:
