@@ -17,6 +17,8 @@ if not TOKEN or not CHAT_ID:
 
 bot = Bot(token=TOKEN)
 
+bot.send_message(chat_id=CHAT_ID, text="Hello from Railway!")
+
 # URL filtrée pour Lyon uniquement
 URL = "https://trouverunlogement.lescrous.fr/tools/41/search?bounds=4.7718134_45.8082628_4.8983774_45.7073666"
 
