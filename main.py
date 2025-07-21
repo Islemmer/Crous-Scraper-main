@@ -3,10 +3,17 @@ import requests
 import time
 from bs4 import BeautifulSoup
 from telegram import Bot
+import logging
 
-# Lire les variables d’environnement (à définir dans Render)
-TOKEN = os.environ["TELEGRAM_TOKEN"]
-CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+# Logging for Railway logs
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Lire les variables d’environnement
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+if not TOKEN or not CHAT_ID:
+    raise EnvironmentError("Missing TELEGRAM_TOKEN or TELEGRAM_CHAT_ID in environment variables.")
 
 bot = Bot(token=TOKEN)
 
@@ -21,7 +28,7 @@ def get_logements():
         response = requests.get(URL)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        print(f"❌ Erreur lors de la requête : {e}")
+        logging.error(f"❌ Erreur lors de la requête : {e}")
         return []
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -34,27 +41,30 @@ def get_logements():
             logements.append(title.text.strip())
     return logements
 
-# Boucle principale
-while True:
-    print("🔍 Vérification des nouveaux logements à Lyon...")
-    logements = get_logements()
-    print(f"📦 {len(logements)} logements trouvés.")
+def main_loop():
+    while True:
+        logging.info("🔍 Vérification des nouveaux logements à Lyon...")
+        logements = get_logements()
+        logging.info(f"📦 {len(logements)} logements trouvés.")
 
-    new_logements = [log for log in logements if log not in seen]
+        new_logements = [log for log in logements if log not in seen]
 
-    for log in logements:
-        print("➡️", log)
+        if new_logements:
+            logging.info(f"🚨 {len(new_logements)} nouveau(x) logement(s) trouvé(s) à Lyon !")
+            for logement in new_logements:
+                message = f"🏠 Nouveau logement à Lyon : {logement}"
+                try:
+                    bot.send_message(chat_id=CHAT_ID, text=message)
+                    seen.add(logement)
+                except Exception as e:
+                    logging.warning(f"⚠️ Erreur lors de l'envoi du message : {e}")
+        else:
+            logging.info("🕒 Aucun nouveau logement trouvé.")
 
-    if new_logements:
-        print(f"🚨 {len(new_logements)} nouveau(x) logement(s) trouvé(s) à Lyon !")
-        for logement in new_logements:
-            message = f"🏠 Nouveau logement à Lyon : {logement}"
-            try:
-                bot.send_message(chat_id=CHAT_ID, text=message)
-                seen.add(logement)
-            except Exception as e:
-                print(f"⚠️ Erreur lors de l'envoi du message : {e}")
-    else:
-        print("🕒 Aucun nouveau logement trouvé.")
+        time.sleep(120)  # Attendre 2 minutes
 
-    time.sleep(120)  # Attendre 2 minutes
+if __name__ == "__main__":
+    try:
+        main_loop()
+    except KeyboardInterrupt:
+        logging.info("🛑 Arrêt manuel du script.")
